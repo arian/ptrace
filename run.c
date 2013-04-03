@@ -32,31 +32,32 @@ void main(void)
 		// child process ends
 	default:		// parent process starts
 
-		while (1) {
-			// switch to singlestep tracing and
-			// release child
-			wait(&wait_val);
+		wait(&wait_val);
 
-			// the child is finished; wait_val != 1407
-			if (WIFEXITED(wait_val)) {
-				break;
-			}
+		// the child is finished; wait_val != 1407
+		while (WIFSTOPPED(wait_val)) {
+
+			// increase instruction counter
+			counter++;
 
 			ptrace(PTRACE_GETREGS, pid, NULL, &regs);
 
+			// rip for 64 bit, eip for 32 bit
 			ins = ptrace(PTRACE_PEEKTEXT, pid, regs.rip, NULL);
 
-			printf("EIP: %lx Instruction "
+			printf("counter: %lld EIP: %lx Instruction "
 					"executed: %lx\n",
-					regs.rip, ins);
+					counter, regs.rip, ins);
 
-			// parent waits for child to stop (execl)
+			/* Make the child execute another instruction */
 			if (ptrace(PTRACE_SINGLESTEP, pid, 0, 0) != 0) {
 				perror("ptrace");
 			}
 
-			counter++;
+			wait(&wait_val);
 		}
 	}			// end of switch
+
 	printf("Counter: %lld\n", counter);
-}				// end of main
+
+}
