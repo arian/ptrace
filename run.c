@@ -56,14 +56,51 @@ int disas(int pid, unsigned long addr)
 	return (int)ud_insn_len(&ud_obj);
 }
 
+void exec(char path[], char argv[])
+{
+	ptrace(0, 0, 0, 0);
+	// must be called in order to allow the
+	// control over the child process
+	execl(path, argv, NULL);
+	// executes the testprogram and causes
+	// the child to stop and send a signal
+	// to the parent, the parent can now
+	// switch to PTRACE_SINGLESTEP
+}
+
+long control(pid)
+{
+	long counter = 1;	// machine instruction counter
+	int wait_val;		// child's return value
+	struct user_regs_struct regs;
+
+	wait(&wait_val);
+
+	// the child is finished; wait_val != 1407
+	while (WIFSTOPPED(wait_val)) {
+
+		// increase instruction counter
+		counter++;
+
+		ptrace(PTRACE_GETREGS, pid, NULL, &regs);
+		disas(pid, regs.rip);
+
+		/* Make the child execute another instruction */
+		if (ptrace(PTRACE_SINGLESTEP, pid, 0, 0) != 0) {
+			perror("ptrace");
+		}
+
+		wait(&wait_val);
+	}
+
+	return counter;
+}
+
 int main(void)
 {
 
-	long long counter = 1;	// machine instruction counter
-	int wait_val;		// child's return value
-	int pid;		// child's process id
-
-	struct user_regs_struct regs;
+	int pid; // child's process id
+	long counter;
 
 	// init udis86
 	ud_t ud_obj;
@@ -72,45 +109,22 @@ int main(void)
 	ud_set_mode(&ud_obj, 64 /* 64 bit */ );
 	ud_set_syntax(&ud_obj, UD_SYN_INTEL);
 
+	char path[] = "./testprog";
+	char argv[] = "testprog";
+
 	// fork process
 	switch (pid = fork()) {
 	case -1:
 		perror("fork");
 		break;
-	case 0:		// child process starts
-		ptrace(0, 0, 0, 0);
-		// must be called in order to allow the
-		// control over the child process
-		execl("./testprog", "testprog", NULL);
-		// executes the testprogram and causes
-		// the child to stop and send a signal
-		// to the parent, the parent can now
-		// switch to PTRACE_SINGLESTEP
+	case 0:
+		exec(path, argv);
 		break;
-		// child process ends
-	default:		// parent process starts
+	default:
+		counter = control(pid);
+	}
 
-		wait(&wait_val);
-
-		// the child is finished; wait_val != 1407
-		while (WIFSTOPPED(wait_val)) {
-
-			// increase instruction counter
-			counter++;
-
-			ptrace(PTRACE_GETREGS, pid, NULL, &regs);
-			disas(pid, regs.rip);
-
-			/* Make the child execute another instruction */
-			if (ptrace(PTRACE_SINGLESTEP, pid, 0, 0) != 0) {
-				perror("ptrace");
-			}
-
-			wait(&wait_val);
-		}
-	}			// end of switch
-
-	printf("Counter: %lld\n", counter);
+	printf("Counter: %ld\n", counter);
 
 	return 0;
 }
