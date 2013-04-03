@@ -7,6 +7,7 @@
 
 #include "udis86/udis86.h"
 
+/* http://udis86.sourceforge.net/manual/manual.html */
 /* borrowed some code from http://www.netagent-blog.jp/files/aiko/ptracer.c */
 
 int read_data(int pid, unsigned long addr, unsigned char *mem, int size)
