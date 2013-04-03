@@ -19,7 +19,7 @@ int read_data(int pid, unsigned long addr, unsigned char *mem, int size)
 
 	for (i = 0; i < n; i++) {
 		errno = 0;
-		unsigned long data = ptrace(PTRACE_PEEKDATA, pid, addr, NULL);
+		unsigned long data = ptrace(PTRACE_PEEKTEXT, pid, addr, NULL);
 		addr += 4;
 		if (errno != 0)
 			return -1;
@@ -56,22 +56,23 @@ int disas(int pid, unsigned long addr)
 	return (int)ud_insn_len(&ud_obj);
 }
 
-void exec(char path[], char argv[])
+int exec(char *argv[], char *argp[])
 {
-	ptrace(0, 0, 0, 0);
 	// must be called in order to allow the
 	// control over the child process
-	execl(path, argv, NULL);
+	ptrace(0, 0, 0, 0);
 	// executes the testprogram and causes
 	// the child to stop and send a signal
 	// to the parent, the parent can now
 	// switch to PTRACE_SINGLESTEP
+	return execl(argv[1], argv[1], NULL);
 }
 
-long control(pid)
+void control(int pid, long *counter)
 {
-	long counter = 1;	// machine instruction counter
-	int wait_val;		// child's return value
+	// child's return value
+	int wait_val;
+	// registers structure, contains regs.rip (instruction address)
 	struct user_regs_struct regs;
 
 	wait(&wait_val);
@@ -80,9 +81,12 @@ long control(pid)
 	while (WIFSTOPPED(wait_val)) {
 
 		// increase instruction counter
-		counter++;
+		(*counter)++;
 
+		// get address of instruction (regs.rip for 64 bit)
 		ptrace(PTRACE_GETREGS, pid, NULL, &regs);
+
+		// disassemble instruction
 		disas(pid, regs.rip);
 
 		/* Make the child execute another instruction */
@@ -93,24 +97,24 @@ long control(pid)
 		wait(&wait_val);
 	}
 
-	return counter;
 }
 
-int main(void)
+void usage(char *argv[])
+{
+	fprintf(stderr, "Usage\n");
+	fprintf(stderr, "    %s <program>\n", argv[0]);
+}
+
+int main(int argc, char *argv[], char *argp[])
 {
 
 	int pid; // child's process id
-	long counter;
+	long counter = 0;
 
-	// init udis86
-	ud_t ud_obj;
-
-	ud_init(&ud_obj);
-	ud_set_mode(&ud_obj, 64 /* 64 bit */ );
-	ud_set_syntax(&ud_obj, UD_SYN_INTEL);
-
-	char path[] = "./testprog";
-	char argv[] = "testprog";
+	if (argc < 2) {
+		usage(argv);
+		return 1;
+	}
 
 	// fork process
 	switch (pid = fork()) {
@@ -118,13 +122,15 @@ int main(void)
 		perror("fork");
 		break;
 	case 0:
-		exec(path, argv);
+		if (exec(argv, argp) == -1) {
+			fprintf(stderr, "could not execute %s\n", argv[1]);
+			return 1;
+		}
 		break;
 	default:
-		counter = control(pid);
+		control(pid, &counter);
+		printf("Counter: %ld\n", counter);
 	}
-
-	printf("Counter: %ld\n", counter);
 
 	return 0;
 }
