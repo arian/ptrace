@@ -4,7 +4,9 @@
 #include <sys/user.h>
 #include <stdio.h>
 
-void main(void)
+#include "udis86/udis86.h"
+
+int main(void)
 {
 
 	long long counter = 1;	// machine instruction counter
@@ -15,6 +17,14 @@ void main(void)
 
 	long ins;
 
+	// init udis86
+	ud_t ud_obj;
+
+	ud_init(&ud_obj);
+	ud_set_mode(&ud_obj, 64 /* 64 bit */);
+	ud_set_syntax(&ud_obj, UD_SYN_INTEL);
+
+	// fork process
 	switch (pid = fork()) {
 	case -1:
 		perror("fork");
@@ -60,4 +70,5 @@ void main(void)
 
 	printf("Counter: %lld\n", counter);
 
+	return 0;
 }

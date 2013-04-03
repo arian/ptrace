@@ -2,3 +2,5 @@ run
 testprog
 *~
 *.asm
+run-run.d
+run-run.o
