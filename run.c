@@ -58,8 +58,9 @@ int disas(int pid, unsigned long addr, unsigned int *time)
 	// UD_VEDNOR_ATT or UD_SYN_INTEL
 	ud_set_syntax(&ud_obj, UD_SYN_INTEL);
 
+	// ud_disassemble fills the ud_obj struct with data
 	if (ud_disassemble(&ud_obj) != 0) {
-		printf("%016lx %-16s %s\n", addr,
+		printf("%016lx %-20s %s\n", addr,
 		       ud_insn_hex(&ud_obj), ud_insn_asm(&ud_obj));
 		(*time) += lookup_instruction_time(ud_obj.mnemonic);
 	}
@@ -110,6 +111,7 @@ void control(int pid, unsigned long *counter, unsigned int *time)
 
 }
 
+// print how the program should be used
 void usage(char *argv[])
 {
 	fprintf(stderr, "Usage\n");
