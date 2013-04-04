@@ -10,31 +10,27 @@
 /* http://udis86.sourceforge.net/manual/manual.html */
 /* borrowed some code from http://www.netagent-blog.jp/files/aiko/ptracer.c */
 
-int read_data(int pid, unsigned long addr, unsigned char *mem, int size)
+int read_data(int pid, unsigned long addr, unsigned char *mem)
 {
-	int i, n;
 	unsigned long *out = (unsigned long *)mem;
 
-	n = size / 4;
+	errno = 0;
+	unsigned long data = ptrace(PTRACE_PEEKTEXT, pid, addr, NULL);
 
-	for (i = 0; i < n; i++) {
-		errno = 0;
-		unsigned long data = ptrace(PTRACE_PEEKTEXT, pid, addr, NULL);
-		addr += 4;
-		if (errno != 0)
-			return -1;
-		*out++ = data;
+	if (errno != 0) {
+		return -1;
 	}
 
+	*out++ = data;
 	return 0;
 }
 
 int disas(int pid, unsigned long addr)
 {
 	ud_t ud_obj;
-	unsigned char buff[32];
+	unsigned char buff[4];
 
-	if (read_data(pid, addr, buff, 32) == -1) {
+	if (read_data(pid, addr, buff) == -1) {
 		printf("(Can't read)\n");
 		return -1;
 	}
@@ -48,8 +44,8 @@ int disas(int pid, unsigned long addr)
 	// UD_VEDNOR_ATT or UD_SYN_INTEL
 	ud_set_syntax(&ud_obj, UD_SYN_INTEL);
 
-	if (ud_disassemble(&ud_obj)) {
-		printf("%08lx: %14s  %s\n", addr,
+	if (ud_disassemble(&ud_obj) != 0) {
+		printf("%016lx %-16s %s\n", addr,
 		       ud_insn_hex(&ud_obj), ud_insn_asm(&ud_obj));
 	}
 
