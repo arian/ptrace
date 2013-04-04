@@ -7,6 +7,20 @@
 
 #include "udis86/udis86.h"
 
+int unsigned lookup_instruction_time(ud_mnemonic_code_t mnemonic)
+{
+	// See itab.h for all different types of instruction mnemonic constants
+	switch (mnemonic) {
+	case UD_Imov:		// mov
+		return 1;
+	case UD_Iint:		// int
+		return 2;
+	default:
+		return 0;
+	}
+
+}
+
 /* http://udis86.sourceforge.net/manual/manual.html */
 /* borrowed some code from http://www.netagent-blog.jp/files/aiko/ptracer.c */
 
@@ -25,7 +39,7 @@ int read_data(int pid, unsigned long addr, unsigned char *mem)
 	return 0;
 }
 
-int disas(int pid, unsigned long addr)
+int disas(int pid, unsigned long addr, unsigned int *time)
 {
 	ud_t ud_obj;
 	unsigned char buff[4];
@@ -47,6 +61,7 @@ int disas(int pid, unsigned long addr)
 	if (ud_disassemble(&ud_obj) != 0) {
 		printf("%016lx %-16s %s\n", addr,
 		       ud_insn_hex(&ud_obj), ud_insn_asm(&ud_obj));
+		(*time) += lookup_instruction_time(ud_obj.mnemonic);
 	}
 
 	return (int)ud_insn_len(&ud_obj);
@@ -64,7 +79,7 @@ int exec(char *argv[], char *argp[])
 	return execl(argv[1], argv[1], NULL);
 }
 
-void control(int pid, long *counter)
+void control(int pid, unsigned long *counter, unsigned int *time)
 {
 	// child's return value
 	int wait_val;
@@ -83,7 +98,7 @@ void control(int pid, long *counter)
 		ptrace(PTRACE_GETREGS, pid, NULL, &regs);
 
 		// disassemble instruction
-		disas(pid, regs.rip);
+		disas(pid, regs.rip, time);
 
 		/* Make the child execute another instruction */
 		if (ptrace(PTRACE_SINGLESTEP, pid, 0, 0) != 0) {
@@ -104,14 +119,14 @@ void usage(char *argv[])
 int main(int argc, char *argv[], char *argp[])
 {
 
-	int pid; // child's process id
-	long counter = 0;
+	int pid;		// child's process id
+	unsigned long counter = 0;
+	unsigned int time = 0;
 
 	if (argc < 2) {
 		usage(argv);
 		return 1;
 	}
-
 	// fork process
 	switch (pid = fork()) {
 	case -1:
@@ -124,8 +139,9 @@ int main(int argc, char *argv[], char *argp[])
 		}
 		break;
 	default:
-		control(pid, &counter);
-		printf("Counter: %ld\n", counter);
+		control(pid, &counter, &time);
+		printf("Counter: %ld instructions in %d cycles\n", counter,
+		       time);
 	}
 
 	return 0;
